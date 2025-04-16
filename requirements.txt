@@ -1,0 +1,7 @@
+# No external libraries required — Python 3.8+
+
+# Base environment
+# (no runtime dependencies)
+
+# Dev & Testing
+pytest>=7.0.0
