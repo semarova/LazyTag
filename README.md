@@ -98,7 +98,7 @@ All unit tests are under /tests.
 
 Have improvements or fixes? Please do!
 
-Fork the repo @ ...
+Fork the repo @ [GitHub](https://github.com/semarova/LazyTag)
 
 Create your branch: git checkout -b feature/improve-hook
 
@@ -109,4 +109,5 @@ Push and open a PR.
 ## 💡 Ideas for Future Enhancements
 
 Automatic updates for copyrigth headers.
+
 Automatic updates for Revision History block.
