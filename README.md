@@ -41,6 +41,8 @@ This pre-commit hook automatically injects JIRA-style issue tags (e.g. `SMR-1010
 
 ```bash
 python install_pre_commit_hook.py
+```
+
 This script will:
 
 Install the tag_commit_hook.py as .git/hooks/pre-commit
