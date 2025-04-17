@@ -1,113 +1,153 @@
 # LazyTag
- Tags changes with Jira issues style tags. 
 
-# 🔖 LazyTag a Git Pre-Commit Hook with JIRA-style Tag Inserter
-
-This pre-commit hook automatically injects JIRA-style issue tags (e.g. `SMR-1010`) into modified source code lines during a Git commit. It aligns tags to column 80 when possible and helps enforce traceability across your codebase.
+**LazyTag** is a CLI tool and Git pre-commit hook that automatically appends Jira-style issue tags to modified lines of source code. It supports multiple languages, aligns tags to column 80 where possible, and helps keep traceability in your codebase.
 
 ---
 
 ## 🚀 Features
 
-- Extracts JIRA issue tag from the current Git branch name.
-- Tags modified lines of supported languages (C/C++, Python, Rust, Ada).
-- Automatically aligns tag comments to column 80 when possible.
-- Preserves existing tags and appends new ones (e.g., `// SMR-1001, SMR-1010`).
-- Skips whitespace-only changes.
-- Tags only the last line of multiline statements.
-- Adds tags to comment lines only if they begin with `//deleted` or `// deleted`.
-- Automatically restages modified files for commit.
-- Supports dry-run mode for safe testing.
-- Logs all tagged lines during commit.
+- ✅ Append issue tags to modified lines of staged files.
+- ✅ Extract tag from branch name (e.g., `SMR-1010-description` → `SMR-1010`).
+- ✅ Manually override tag with `--tag` argument.
+- ✅ Smart alignment: tags are appended and aligned to column 80.
+- ✅ Preserves existing comments and tags.
+- ✅ Special support for `# deleted` or `// deleted` comment lines.
+- ✅ Dry-run support for safe previewing.
+- ✅ Installable as a Git pre-commit hook.
 
 ---
 
-## 🛠️ Supported Languages & Comment Styles
+## 🛠 Upcoming Features
 
-| Extension | Language | Comment Style |
-|-----------|----------|----------------|
-| `.c`, `.cpp`, `.h`, `.hpp` | C/C++ | `//` |
-| `.rs` | Rust | `//` |
-| `.py` | Python | `#` |
-| `.adb`, `.ads`, `.ada` | Ada | `--` |
+- 📝 Auto-update copyright headers across source files
+- 🧾 Auto-update structured revision history blocks in supported formats
 
 ---
 
 ## 📦 Installation
 
-### 1. Clone or copy this repo into your project.
+### 🔧 Prerequisites
+- Python 3.7+
+- Git (used internally to get branch and diff info)
 
-### 2. Install the pre-commit hook:
-
+### 🔁 Install from source
 ```bash
-python install_pre_commit_hook.py
+git clone https://github.com/semarova/LazyTag.git
+cd lazytag
+pip install .
+# or with dev extras:
+pip install .[dev]
 ```
 
-This script will:
-
-Install the tag_commit_hook.py as .git/hooks/pre-commit
-
-Backup any existing hook to .pre-commit.bak
-
-Make the hook executable
-
-## ✅ Usage
-Make changes in your code, stage them, and commit as usual:
-
-``` bash
-git checkout -b SMR-1010-add-logging
-git add my_file.c
-git commit -m "Refactor: rename variable"
+### 📜 Install as a Git Hook
+```bash
+lazytag install
 ```
-If a line was changed, it will be updated like:
+This installs a pre-commit hook at `.git/hooks/pre-commit` that automatically runs `lazytag tag` before every commit.
 
-``` c
-int x = 10;
-// becomes:
-int limit = 10;                                              // SMR-1010
+---
+
+## 🧑‍💻 Usage
+
+### Append tags based on current branch:
+```bash
+lazytag tag
 ```
 
-### 🧪 Dry Run Mode
-To preview what would be tagged without modifying any files:
-
-``` bash
-python tag_commit_hook.py --dry-run
+### Manually specify a tag:
+```bash
+lazytag tag --tag ABC-123
 ```
-### 🧪 Testing
-Install dev requirements and run the test suite:
 
-bash
-Copy
-Edit
+### Preview (no file changes):
+```bash
+lazytag tag --dry-run
+```
+
+### Help & Version
+```bash
+lazytag --help
+lazytag --version
+```
+
+---
+
+## 🧠 How It Works
+- Parses staged files.
+- Identifies modified lines (excluding whitespace-only changes).
+- Adds or appends issue tags inline as comments.
+- Preserves existing comments and tags.
+- Aligns tags to column 80 if possible, or places them after code.
+- Specially handles `// deleted` or `# deleted` comment markers.
+
+---
+
+## 💡 Supported Languages
+| Language | Extensions            | Comment Style |
+|----------|------------------------|----------------|
+| C/C++    | `.c`, `.cpp`, `.h`     | `//`           |
+| Rust     | `.rs`                  | `//`           |
+| Python   | `.py`                  | `#`            |
+| Ada      | `.adb`, `.ads`, `.ada` | `--`           |
+
+Case-insensitive extensions are fully supported (e.g., `.CPP`, `.PY`).
+
+---
+
+## 📁 Project Structure
+
+```
+lazytag/
+├── lazytag.py           # CLI entrypoint (tag, install)
+├── core.py              # Core tagging logic
+├── installer.py         # Hook installer
+├── setup.py             # Package definition
+├── tests/
+│   └── test_core.py     # Unit tests for tag logic
+├── README.md
+└── requirements.txt     # Dev dependencies (pytest, etc.)
+```
+
+---
+
+## 🧪 Testing
+
+Run the test suite using `pytest`:
+```bash
 pip install -r requirements.txt
 pytest
-All unit tests are under /tests.
-
-## 🗂 Project Structure
-``` bash
-.
-├── tag_commit_hook.py           # Main tagging logic
-├── install_pre_commit_hook.py   # Installer utility
-├── requirements.txt             # Optional: dev dependencies
-├── tests/
-│   └── test_tag_commit_hook.py  # Unit tests
-└── .git/hooks/pre-commit        # Installed hook (auto-generated)
 ```
 
-## 👥 Contributing
+---
 
-Have improvements or fixes? Please do!
+## 🛠 Contributing
 
-Fork the repo @ [GitHub](https://github.com/semarova/LazyTag)
+Feel free to fork, improve, and submit a PR! Contributions are welcome and appreciated.
 
-Create your branch: git checkout -b feature/improve-hook
+---
 
-Commit your changes
+## 📄 License
+MIT License. Use it, modify it, make it yours.
 
-Push and open a PR. 
+---
 
-## 💡 Ideas for Future Enhancements
+## ✨ Example
 
-Automatic updates for copyrigth headers.
+Before:
+```c
+int height = 10; // units: feet
+```
+After:
+```c
+int height = 10; // units: feet                         // SMR-1010
+```
 
-Automatic updates for Revision History block.
+Deleted lines:
+```python
+# deleted print("Done")                                  # SMR-1010
+```
+
+---
+
+Made with 🧠 and ⚙️ by developers who hate forgetting to tag their commits.
+
