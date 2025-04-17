@@ -65,3 +65,9 @@ def test_extract_tags_handles_punctuation():
     assert extract_tags("//SMR-1010") == ["SMR-1010"]
     assert extract_tags("#SMR-1010") == ["SMR-1010"]
     assert extract_tags("--SMR-1010") == ["SMR-1010"]
+
+def test_does_not_duplicate_existing_tag():
+    line = "int x = 10; // HMR-101, SMR-1010"
+    tags = ["HMR-101", "SMR-1010"]
+    result = align_tags_with_comments(line, tags.copy(), "//", "SMR-1010")
+    assert result.count("SMR-1010") == 1

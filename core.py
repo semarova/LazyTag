@@ -69,6 +69,10 @@ def is_code_line(line, ext):
     return bool(stripped) and not stripped.startswith(COMMENT_CHARS[ext])
 
 def align_tags_with_comments(line, tags, comment_char, new_tag):
+    all_tags = extract_tags(line)  # Line-wide deduplication here
+    if new_tag in all_tags:
+        return line  # No change needed
+
     if new_tag not in tags:
         tags.append(new_tag)
 
@@ -127,17 +131,22 @@ def process_file(filepath, tag, dry_run=False):
         update_needed = False
 
         if idx in changes:
-            if is_code_line(original, ext):
-                match = re.search(rf'{re.escape(comment_char)}\s*(.*)$', original)
-                tags = extract_tags(match.group(1)) if match else []
-                modified_line = align_tags_with_comments(original, tags, comment_char, tag)
-                update_needed = True
+            # If the tag is already anywhere in the line, skip tagging
+            existing_all_tags = extract_tags(original)
+            if tag in existing_all_tags:
+                update_needed = False
+            else:
+                if is_code_line(original, ext):
+                    match = re.search(rf'{re.escape(comment_char)}\s*(.*)$', original)
+                    tags = extract_tags(match.group(1)) if match else []
+                    modified_line = align_tags_with_comments(original, tags, comment_char, tag)
+                    update_needed = True
 
-            elif should_tag_comment_line(original, ext):
-                match = re.search(rf'{re.escape(comment_char)}\s*(.*)$', original)
-                tags = extract_tags(match.group(1)) if match else []
-                modified_line = align_tags_to_col_80_preserve_deleted(original, tags, comment_char, tag)
-                update_needed = True
+                elif should_tag_comment_line(original, ext):
+                    match = re.search(rf'{re.escape(comment_char)}\s*(.*)$', original)
+                    tags = extract_tags(match.group(1)) if match else []
+                    modified_line = align_tags_to_col_80_preserve_deleted(original, tags, comment_char, tag)
+                    update_needed = True
 
         if update_needed:
             modified = True
