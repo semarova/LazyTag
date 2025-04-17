@@ -1,4 +1,18 @@
 #!/usr/bin/env python
+"""
+Git Pre-Commit Hook: Tag Source Code with Jira Issue ID
+
+Features:
+- Extracts Jira-style tag (e.g., SMR-1010) from the current branch name.
+- Adds or appends tags to modified lines of source code (C/C++, Rust, Python, Ada).
+- Appends tag blocks while preserving existing comments.
+- Aligns tags to column 80 if possible.
+- Tags special deleted-comment lines (e.g., "# deleted ...").
+- Automatically re-stages modified files.
+- Supports dry-run mode (`--dry-run`).
+- Logs all tagging activity per line and file.
+"""
+
 import os
 import re
 import subprocess
@@ -20,7 +34,9 @@ COMMENT_CHARS = {
 MAX_LINE_LENGTH = 80
 DRY_RUN = '--dry-run' in sys.argv
 
+
 def get_branch_tag():
+    """Extract the Jira-style tag from the current branch name."""
     try:
         branch = subprocess.check_output(['git', 'rev-parse', '--abbrev-ref', 'HEAD']).decode().strip()
         match = re.search(r'([A-Z]+-\d+)', branch)
@@ -28,11 +44,15 @@ def get_branch_tag():
     except subprocess.CalledProcessError:
         return None
 
+
 def get_staged_files():
+    """Return a list of staged source files with supported extensions."""
     output = subprocess.check_output(['git', 'diff', '--cached', '--name-only']).decode()
     return [line.strip() for line in output.splitlines() if Path(line.strip()).suffix in COMMENT_CHARS]
 
+
 def get_file_diff_lines(filename):
+    """Return the line numbers that are modified in the staged diff for a file."""
     output = subprocess.check_output(['git', 'diff', '--cached', '-U0', filename]).decode()
     changes = []
     for line in output.splitlines():
@@ -45,31 +65,64 @@ def get_file_diff_lines(filename):
                     changes.append(i)
     return set(changes)
 
+
+def extract_tags(comment):
+    """Extract all Jira-style tags from an inline comment block."""
+    return [t.strip() for t in comment.split(',') if re.match(r'[A-Z]+-\d+', t)]
+
+
 def should_tag_comment_line(line, ext):
-    """Check if the line starts with a valid 'deleted' comment tag for the given language."""
+    """Check if this comment line is a 'deleted' marker (e.g., # deleted ...)."""
     comment_char = COMMENT_CHARS.get(ext, '').lower()
     stripped = line.strip().lower()
-    return (
-        stripped.startswith(f"{comment_char}deleted")  or 
-        stripped.startswith(f"{comment_char} deleted") or
-        stripped.startswith(f"{comment_char}delete")   or 
-        stripped.startswith(f"{comment_char} delete")  or
-        stripped.startswith(f"{comment_char}removed")  or
-        stripped.startswith(f"{comment_char} removed") or
-        stripped.startswith(f"{comment_char}remove")   or
-        stripped.startswith(f"{comment_char} remove")
-    )
+    return stripped.startswith(f"{comment_char}deleted") or stripped.startswith(f"{comment_char} deleted")
 
-def align_tags_to_col_80_preserve_deleted(line, tags, comment_char, new_tag):
-    """Align tags so they end at column 80 without breaking lines that start with a comment prefix."""
+
+def is_code_line(line, ext):
+    """Return True if the line is a valid code line (not blank or comment)."""
+    stripped = line.strip()
+    return bool(stripped) and not stripped.startswith(COMMENT_CHARS[ext])
+
+
+def align_tags_with_comments(line, tags, comment_char, new_tag):
+    """Preserve existing inline comments and append Jira tags at the end, aligned to column 80."""
     if new_tag not in tags:
         tags.append(new_tag)
 
-    # Build new tag block
     tag_block = f"{comment_char} {', '.join(tags)}"
+    line = line.rstrip()
 
-    # Strip existing trailing tag block (but NOT the first comment section like '# deleted')
-    # We assume any tag block starts after 40 characters
+    if comment_char in line:
+        split_index = line.find(comment_char)
+        code_part = line[:split_index].rstrip()
+        comment_part = line[split_index:].rstrip()
+    else:
+        code_part = line
+        comment_part = ""
+
+    # Combine original comment and new tag
+    if comment_part:
+        combined_comment = f"{comment_part} {tag_block}"
+    else:
+        combined_comment = f"{tag_block}"
+
+    total_len = len(code_part) + 1 + len(combined_comment)
+    if total_len > MAX_LINE_LENGTH:
+        return f"{code_part} {combined_comment}"
+    else:
+        padding = MAX_LINE_LENGTH - len(code_part) - len(combined_comment)
+        return f"{code_part}{' ' * padding}{combined_comment}"
+
+
+def align_tags_to_col_80_preserve_deleted(line, tags, comment_char, new_tag):
+    """Align tags to column 80 for 'deleted' lines without removing their original content."""
+    if new_tag not in tags:
+        tags.append(new_tag)
+
+    tag_block = f"{comment_char} {', '.join(tags)}"
+    line = line.rstrip()
+
+    # Assume first 40 characters are code, search for comment char after
     tag_search_start = 40
     tag_pos = line.find(comment_char, tag_search_start)
 
@@ -85,11 +138,9 @@ def align_tags_to_col_80_preserve_deleted(line, tags, comment_char, new_tag):
         padding = MAX_LINE_LENGTH - len(code_part) - len(tag_block)
         return f"{code_part}{' ' * padding}{tag_block}"
 
-def extract_tags(comment):
-    return [t.strip() for t in comment.split(',') if re.match(r'[A-Z]+-\d+', t)]
 
 def process_file(filepath, tag):
-    ext = Path(filepath).suffix
+    """Process and tag modified lines in a source file."""
     comment_char = COMMENT_CHARS[ext]
     changes = get_file_diff_lines(filepath)
 
@@ -106,20 +157,14 @@ def process_file(filepath, tag):
 
         if idx in changes:
             if is_code_line(original, ext):
-                # Handle existing comment
+                # Extract tags from any existing inline comment
                 match = re.search(rf'{re.escape(comment_char)}\s*(.*)$', original)
-                if match:
-                    tags = extract_tags(match.group(1))
-                    base = original[:match.start()]
-                else:
-                    tags = []
-                    base = original
-
-                modified_line = align_tags_to_col_80_preserve_deleted(original, tags, comment_char, tag)
+                tags = extract_tags(match.group(1)) if match else []
+                modified_line = align_tags_with_comments(original, tags, comment_char, tag)
                 update_needed = True
 
             elif should_tag_comment_line(original, ext):
-                # Don't strip any part of the line — preserve it all
+                # Handle "# deleted ..." or "// deleted ..." lines
                 match = re.search(rf'{re.escape(comment_char)}\s*(.*)$', original)
                 tags = extract_tags(match.group(1)) if match else []
                 modified_line = align_tags_to_col_80_preserve_deleted(original, tags, comment_char, tag)
@@ -127,35 +172,26 @@ def process_file(filepath, tag):
 
         if update_needed:
             modified = True
-            if DRY_RUN:
-                print(f"[DRY-RUN] {filepath}:{idx} --> {modified_line}")
-            else:
-                print(f"[TAGGED]  {filepath}:{idx} --> {modified_line}")
+            log_type = "DRY-RUN" if DRY_RUN else "TAGGED"
+            print(f"[{log_type}] {filepath}:{idx} --> {modified_line}")
 
         updated_lines.append(modified_line + '\n')
 
     if modified and not DRY_RUN:
         with open(filepath, 'w') as f:
             f.writelines(updated_lines)
-        subprocess.run(['git', 'add', filepath])
+        subprocess.run(['git', 'add', filepath])  # Restage
 
-def is_code_line(line, ext):
-    stripped = line.strip()
-    if not stripped:
-        return False
-    if ext in COMMENT_CHARS:
-        return not stripped.startswith(COMMENT_CHARS[ext])
-    return False
 
 def main():
     tag = get_branch_tag()
     if not tag:
-        print("[WARN]  No JIRA-style tag found in branch name.")
+        print("[ERROR] No Jira-style tag found in branch name (e.g., SMR-1010).")
         sys.exit(1)
 
     files = get_staged_files()
     if not files:
-        print("[SUCCESS] No staged files matching language targets.")
+        print("[INFO] No staged source files to process.")
         sys.exit(0)
 
     print(f"[INFO] Tagging with: {tag}\n")
@@ -163,9 +199,10 @@ def main():
         process_file(file, tag)
 
     if DRY_RUN:
-        print("\n[DRY-RUN] Dry-run complete. No files were modified.")
+        print("\n[DRY-RUN] Complete. No files were modified.")
     else:
         print("\n[SUCCESS] Pre-commit tagging completed.")
+
 
 if __name__ == "__main__":
     main()
