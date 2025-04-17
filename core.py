@@ -69,47 +69,53 @@ def is_code_line(line, ext):
     return bool(stripped) and not stripped.startswith(COMMENT_CHARS[ext])
 
 def align_tags_with_comments(line, tags, comment_char, new_tag):
-    """Preserve original inline comment and append tags without duplicating comment characters."""
+    """Preserve original inline comment and append tags, avoiding duplicate comment chars."""
     all_existing_tags = extract_tags(line)
     if new_tag in all_existing_tags:
-        return line  # Skip if tag already present
+        return line  # Already tagged
 
     line = line.rstrip()
 
-    if comment_char in line:
-        split_index = line.find(comment_char)
+    # Find first comment position
+    split_index = line.find(comment_char)
+    if split_index != -1:
         code_part = line[:split_index].rstrip()
-        comment_part = line[split_index:].strip()
+        comment_tail = line[split_index:].replace(comment_char, '').strip()
     else:
         code_part = line
-        comment_part = ""
+        comment_tail = ""
 
-    # Extract and remove tags from comment_part
-    raw_parts = re.split(r'[,\s]+', comment_part)
-    non_tag_comment = " ".join([
-        part for part in raw_parts
-        if not re.fullmatch(r'[A-Z]+-\d+', part.strip("/#-"))
-    ]).lstrip(comment_char).strip()
+    # Split and clean comment tail
+    parts = re.split(r'[,\s]+', comment_tail)
+    comment_words = []
+    existing_tags = []
 
-    existing_tags = extract_tags(comment_part)
+    for part in parts:
+        cleaned = part.strip("/#-")
+        if re.fullmatch(r'[A-Z]+-\d+', cleaned):
+            existing_tags.append(cleaned)
+        else:
+            comment_words.append(part)
+
     if new_tag not in existing_tags:
         existing_tags.append(new_tag)
 
-    tag_block = f"{comment_char} {', '.join(existing_tags)}"
+    # Rebuild single comment block
+    comment_content = " ".join(comment_words).strip()
+    tag_block = f"{', '.join(existing_tags)}"
 
-    # Rebuild final comment section
-    combined_comment = ""
-    if non_tag_comment:
-        combined_comment = f"{comment_char} {non_tag_comment} {tag_block}"
+    if comment_content:
+        final_comment = f"{comment_char} {comment_content} {comment_char} {tag_block}"
     else:
-        combined_comment = tag_block
+        final_comment = f"{comment_char} {tag_block}"
 
-    total_len = len(code_part) + 1 + len(combined_comment)
+    # Align to 80
+    total_len = len(code_part) + 1 + len(final_comment)
     if total_len > MAX_LINE_LENGTH:
-        return f"{code_part} {combined_comment}"
+        return f"{code_part} {final_comment}"
     else:
-        padding = MAX_LINE_LENGTH - len(code_part) - len(combined_comment)
-        return f"{code_part}{' ' * padding}{combined_comment}"
+        padding = MAX_LINE_LENGTH - len(code_part) - len(final_comment)
+        return f"{code_part}{' ' * padding}{final_comment}"
 
 def align_tags_to_col_80_preserve_deleted(line, tags, comment_char, new_tag):
     if new_tag not in tags:
