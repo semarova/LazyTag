@@ -50,7 +50,14 @@ def get_file_diff_lines(filename):
     return set(changes)
 
 def extract_tags(comment):
-    return [t.strip() for t in comment.split(',') if re.match(r'[A-Z]+-\d+', t)]
+    """Extract Jira-style tags from a comment string using robust splitting and cleanup."""
+    parts = re.split(r'[,\s]+', comment)
+    tags = []
+    for part in parts:
+        cleaned = part.lstrip("/#-")  # Strip leading slashes, hashes, dashes
+        if re.fullmatch(r'[A-Z]+-\d+', cleaned):
+            tags.append(cleaned)
+    return tags
 
 def should_tag_comment_line(line, ext):
     comment_char = COMMENT_CHARS.get(ext, '').lower()

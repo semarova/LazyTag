@@ -115,7 +115,7 @@ lazytag/
 Run the test suite using `pytest`:
 ```bash
 pip install -r requirements.txt
-pytest
+pytest -v --ignore=legacy
 ```
 
 ---

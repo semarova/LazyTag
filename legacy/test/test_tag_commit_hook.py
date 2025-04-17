@@ -1,5 +1,5 @@
 import pytest
-from tag_commit_hook import extract_tags, align_tag, is_code_line, should_tag_comment_line
+from legacy.tag_commit_hook import extract_tags, align_tag, is_code_line, should_tag_comment_line
 
 def test_extract_tags():
     assert extract_tags("SMR-1001") == ["SMR-1001"]

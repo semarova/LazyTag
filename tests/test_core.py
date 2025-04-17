@@ -54,3 +54,14 @@ def test_case_insensitive_extensions():
     path = Path("file.ADB")
     assert path.suffix.lower() in COMMENT_CHARS
     assert COMMENT_CHARS[path.suffix.lower()] == "--"
+
+def test_extract_tags_handles_spaces_and_commas():
+    assert extract_tags("// SMR-1010") == ["SMR-1010"]
+    assert extract_tags("//SMR-1010") == ["SMR-1010"]
+    assert extract_tags("// SMR-1010, SMR-1010") == ["SMR-1010", "SMR-1010"]
+    assert extract_tags("// SMR-1010 XYZ-999") == ["SMR-1010", "XYZ-999"]
+
+def test_extract_tags_handles_punctuation():
+    assert extract_tags("//SMR-1010") == ["SMR-1010"]
+    assert extract_tags("#SMR-1010") == ["SMR-1010"]
+    assert extract_tags("--SMR-1010") == ["SMR-1010"]
