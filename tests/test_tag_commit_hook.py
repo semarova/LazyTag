@@ -46,3 +46,17 @@ def test_should_tag_comment_line_valid_cases():
 def test_should_tag_comment_line_invalid_cases():
     assert should_tag_comment_line("// something else", ".cpp") is False
     assert should_tag_comment_line("--deleted", ".ada") is False
+
+def test_preserve_existing_inline_comment():
+    line = "int x = 10; // units: feet"
+    tags = []
+    tag = "SMR-1010"
+    result = align_tags_with_comments(line, tags.copy(), "//", tag)
+    assert "units: feet" in result
+    assert "SMR-1010" in result
+    assert len(result) <= 80 or result.endswith(f"// SMR-1010")
+
+def test_extension_case_insensitivity():
+    path = Path("foo.ADB")
+    assert path.suffix.lower() in COMMENT_CHARS
+    assert COMMENT_CHARS[path.suffix.lower()] == "--"
