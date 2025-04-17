@@ -155,6 +155,8 @@ def process_file(filepath, tag, dry_run=False):
             # If the tag is already anywhere in the line, skip tagging
             existing_all_tags = extract_tags(original)
             if tag in existing_all_tags:
+                if dry_run:
+                    print(f"[SKIP]    {filepath}:{idx} (tag already exists)")
                 update_needed = False
             else:
                 if is_code_line(original, ext):
@@ -172,7 +174,7 @@ def process_file(filepath, tag, dry_run=False):
         if update_needed:
             modified = True
             log_type = "DRY-RUN" if dry_run else "TAGGED"
-            print(f"[{log_type}] {filepath}:{idx} --> {modified_line}")
+            print(f"[{log_type}] {filepath}:{idx}\n  BEFORE: {original}\n  AFTER:  {modified_line}\n")
 
         updated_lines.append(modified_line + '\n')
 
