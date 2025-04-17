@@ -48,7 +48,7 @@ def get_branch_tag():
 def get_staged_files():
     """Return a list of staged source files with supported extensions."""
     output = subprocess.check_output(['git', 'diff', '--cached', '--name-only']).decode()
-    return [line.strip() for line in output.splitlines() if Path(line.strip()).suffix in COMMENT_CHARS]
+    return [line.strip() for line in output.splitlines() if Path(line.strip()).suffix.lower() in COMMENT_CHARS]
 
 
 def get_file_diff_lines(filename):
@@ -141,6 +141,7 @@ def align_tags_to_col_80_preserve_deleted(line, tags, comment_char, new_tag):
 
 def process_file(filepath, tag):
     """Process and tag modified lines in a source file."""
+    ext = Path(filepath).suffix.lower()
     comment_char = COMMENT_CHARS[ext]
     changes = get_file_diff_lines(filepath)
 

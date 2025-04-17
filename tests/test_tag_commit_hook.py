@@ -55,3 +55,8 @@ def test_preserve_existing_inline_comment():
     assert "units: feet" in result
     assert "SMR-1010" in result
     assert len(result) <= 80 or result.endswith(f"// SMR-1010")
+
+def test_extension_case_insensitivity():
+    path = Path("foo.ADB")
+    assert path.suffix.lower() in COMMENT_CHARS
+    assert COMMENT_CHARS[path.suffix.lower()] == "--"
