@@ -69,13 +69,13 @@ def is_code_line(line, ext):
     return bool(stripped) and not stripped.startswith(COMMENT_CHARS[ext])
 
 def align_tags_with_comments(line, tags, comment_char, new_tag):
-    """Preserve non-tag comment content, and append tag block only once."""
+    """Preserve original inline comment and append tags without duplicating comment characters."""
     all_existing_tags = extract_tags(line)
     if new_tag in all_existing_tags:
-        return line  # Skip tagging if already present
+        return line  # Skip if tag already present
 
-    # Parse and split comment
     line = line.rstrip()
+
     if comment_char in line:
         split_index = line.find(comment_char)
         code_part = line[:split_index].rstrip()
@@ -84,25 +84,25 @@ def align_tags_with_comments(line, tags, comment_char, new_tag):
         code_part = line
         comment_part = ""
 
-    # Extract tags from comment and remove them
+    # Extract and remove tags from comment_part
     raw_parts = re.split(r'[,\s]+', comment_part)
     non_tag_comment = " ".join([
         part for part in raw_parts
         if not re.fullmatch(r'[A-Z]+-\d+', part.strip("/#-"))
-    ])
+    ]).lstrip(comment_char).strip()
 
-    # Build updated tag list
     existing_tags = extract_tags(comment_part)
     if new_tag not in existing_tags:
         existing_tags.append(new_tag)
 
     tag_block = f"{comment_char} {', '.join(existing_tags)}"
 
-    # Combine everything
-    if non_tag_comment.strip() and not non_tag_comment.strip().startswith(comment_char):
-        non_tag_comment = f"{comment_char} {non_tag_comment.strip()}"
-
-    combined_comment = f"{non_tag_comment} {tag_block}".strip()
+    # Rebuild final comment section
+    combined_comment = ""
+    if non_tag_comment:
+        combined_comment = f"{comment_char} {non_tag_comment} {tag_block}"
+    else:
+        combined_comment = tag_block
 
     total_len = len(code_part) + 1 + len(combined_comment)
     if total_len > MAX_LINE_LENGTH:
