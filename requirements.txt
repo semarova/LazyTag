@@ -1,3 +1,6 @@
+# requirements.txt
+# LazyTag development dependencies
+
 # No external libraries required — Python 3.8+
 
 # Base environment
