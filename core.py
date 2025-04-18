@@ -109,7 +109,10 @@ def align_tags_with_comments(line, tags, comment_char, new_tag):
 
     # Only append tag if it's not already present
     if new_tag not in current_tags:
-        preserved_chunks.append(f"{comment_char}{new_tag}")
+        if preserved_chunks:
+            preserved_chunks[-1] = preserved_chunks[-1].rstrip() + f", {new_tag}"
+        else:
+            preserved_chunks.append(f"{comment_char}{new_tag}")
 
     # Reconstruct the line
     reconstructed = f"{code_part}{spacing}" + "".join(preserved_chunks)
