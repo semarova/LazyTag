@@ -110,9 +110,16 @@ def align_tags_with_comments(line, tags, comment_char, new_tag):
     # Only append tag if it's not already present
     if new_tag not in current_tags:
         if preserved_chunks:
-            preserved_chunks[-1] = preserved_chunks[-1].rstrip() + f", {new_tag}"
+            if preserved_chunks[-1].strip().startswith(comment_char):
+                preserved_chunks[-1] = preserved_chunks[-1].rstrip() + f", {new_tag}"
+            else:
+                preserved_chunks.append(f" {comment_char} {new_tag}")
         else:
-            preserved_chunks.append(f"{comment_char}{new_tag}")
+            # No comments originally; align tag block to col 80
+            base = f"{code_part}"
+            tag = f"{comment_char} {new_tag}"
+            padding = " " * max(1, 80 - len(base) - len(tag))
+            return f"{base}{padding}{tag}"
 
     # Reconstruct the line
     reconstructed = f"{code_part}{spacing}" + "".join(preserved_chunks)
