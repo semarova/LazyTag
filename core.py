@@ -76,7 +76,7 @@ def align_tags_with_comments(line, tags, comment_char, new_tag):
 
     line = line.rstrip()
 
-    # Find first comment position
+    # Identify position of last tag-related comment to preserve original spacing
     split_index = line.find(comment_char)
     if split_index != -1:
         code_part = line[:split_index].rstrip()
@@ -85,27 +85,32 @@ def align_tags_with_comments(line, tags, comment_char, new_tag):
         code_part = line
         comment_part = ""
 
-    # Preserve the original comment structure
-    preserved_comment = comment_part
+    # Extract existing tags and remove them from the comment part to preserve layout
+    comment_chunks = comment_part.split(comment_char)
+    tagless_chunks = []
+    existing_tags = []
 
-    # Only extract tags to determine if new_tag needs to be added
-    existing_tags = extract_tags(comment_part)
+    for chunk in comment_chunks:
+        chunk = chunk.strip()
+        tags_in_chunk = extract_tags(chunk)
+        if tags_in_chunk:
+            existing_tags.extend(tags_in_chunk)
+        else:
+            if chunk:
+                tagless_chunks.append(chunk)
+
+    # Avoid duplication and sort for consistency
     if new_tag not in existing_tags:
         existing_tags.append(new_tag)
 
-    # Build the new tag block
+    final_comment = " ".join(f"{comment_char} {chunk}" for chunk in tagless_chunks).rstrip()
     tag_block = f"{comment_char} {', '.join(existing_tags)}"
 
-    # Reconstruct the line preserving comment position and appending tag block
-    if preserved_comment:
-        reconstructed = f"{code_part} {preserved_comment}"
+    # Append tag block at the end without altering original comment alignment
+    if final_comment:
+        return f"{code_part} {final_comment} {tag_block}"
     else:
-        reconstructed = code_part
-
-    # Append tag block at the end (respecting inline comments' position)
-    reconstructed += f" {tag_block}"
-
-    return reconstructed
+        return f"{code_part} {tag_block}"
 
 def align_tags_to_col_80_preserve_deleted(line, tags, comment_char, new_tag):
     if new_tag not in tags:
