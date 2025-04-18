@@ -95,14 +95,13 @@ def align_tags_with_comments(line, tags, comment_char, new_tag):
     for chunk in comment_chunks:
         chunk_tags = extract_tags(chunk)
         current_tags.update(chunk_tags)
-        preserved_chunks.append(chunk)
+        preserved_chunks.append(chunk)  # Always preserve the chunk as-is
 
-    # Only append tag if it's not already present
     if new_tag not in current_tags:
-        current_tags.add(new_tag)
-        preserved_chunks.append(", ".join(sorted(current_tags)))
+        # Append a single tag-only comment block
+        preserved_chunks.append(new_tag)
 
-    # Reconstruct the line
+    # Reconstruct line preserving original comment alignment
     reconstructed = f"{code_part}{spacing}" + " ".join(f"{comment_char} {chunk}" for chunk in preserved_chunks)
     return reconstructed
 
