@@ -87,22 +87,32 @@ def align_tags_with_comments(line, tags, comment_char, new_tag):
         spacing = ""
         comment_part = ""
 
-    # Preserve all original comment chunks
-    comment_chunks = [chunk.strip() for chunk in comment_part.split(comment_char) if chunk.strip()]
-    preserved_chunks = []
+    # Preserve all original comment chunks with exact spacing
+    chunks = []
+    remainder = comment_part
     current_tags = set()
 
-    for chunk in comment_chunks:
+    while True:
+        idx = remainder.find(comment_char)
+        if idx == -1:
+            break
+        next_idx = remainder.find(comment_char, idx + len(comment_char))
+        chunk = remainder[idx:next_idx] if next_idx != -1 else remainder[idx:]
+        chunks.append(chunk)
+        remainder = remainder[next_idx:] if next_idx != -1 else ""
+
+    preserved_chunks = []
+    for chunk in chunks:
         chunk_tags = extract_tags(chunk)
         current_tags.update(chunk_tags)
-        preserved_chunks.append(chunk)  # Always preserve the chunk as-is
+        preserved_chunks.append(chunk)
 
+    # Only append tag if it's not already present
     if new_tag not in current_tags:
-        # Append a single tag-only comment block
-        preserved_chunks.append(new_tag)
+        preserved_chunks.append(f"{comment_char}{new_tag}")
 
-    # Reconstruct line preserving original comment alignment
-    reconstructed = f"{code_part}{spacing}" + " ".join(f"{comment_char} {chunk}" for chunk in preserved_chunks)
+    # Reconstruct the line
+    reconstructed = f"{code_part}{spacing}" + "".join(preserved_chunks)
     return reconstructed
 
 def align_tags_to_col_80_preserve_deleted(line, tags, comment_char, new_tag):
