@@ -62,7 +62,20 @@ def extract_tags(comment):
 def should_tag_comment_line(line, ext):
     comment_char = COMMENT_CHARS.get(ext, '').lower()
     stripped = line.strip().lower()
-    return stripped.startswith(f"{comment_char}deleted") or stripped.startswith(f"{comment_char} deleted")
+    return (
+        stripped.startswith(f"{comment_char}deleted")  or 
+        stripped.startswith(f"{comment_char} deleted") or
+        stripped.startswith(f"{comment_char}delete")   or 
+        stripped.startswith(f"{comment_char} delete")  or 
+        stripped.startswith(f"{comment_char}remove")   or 
+        stripped.startswith(f"{comment_char} remove")  or 
+        stripped.startswith(f"{comment_char}removed")  or 
+        stripped.startswith(f"{comment_char} removed") or
+        stripped.startswith(f"{comment_char}move")     or 
+        stripped.startswith(f"{comment_char} move")    or
+        stripped.startswith(f"{comment_char}moved")    or
+        stripped.startswith(f"{comment_char} moved")
+    )
 
 def is_code_line(line, ext):
     stripped = line.strip()
