@@ -103,14 +103,32 @@ def align_tags_with_comments(line, tags, comment_char, new_tag):
 
     preserved_chunks = []
     for chunk in chunks:
+        preserved_chunks.append(chunk)
         chunk_tags = extract_tags(chunk)
         current_tags.update(chunk_tags)
-        preserved_chunks.append(chunk)
 
     # Only append tag if it's not already present
     if new_tag not in current_tags:
-        tag_chunk = f" {comment_char} {new_tag}"
-        preserved_chunks.append(tag_chunk)
+        # Append to last tag block if the last chunk ends in a tag block
+        if preserved_chunks:
+            last = preserved_chunks[-1]
+            last_tags = extract_tags(last)
+            if last_tags:
+                # Append to existing tag block without changing spacing
+                tagless = last.rstrip()
+                if tagless.endswith(',') or tagless.endswith(' '):
+                    preserved_chunks[-1] = tagless + new_tag
+                else:
+                    preserved_chunks[-1] = tagless + ", " + new_tag
+            else:
+                # Add new tag comment block
+                preserved_chunks.append(f" {comment_char} {new_tag}")
+        else:
+            # No comments originally; align tag block to col 80
+            base = f"{code_part}"
+            tag = f"{comment_char} {new_tag}"
+            padding = " " * max(1, 80 - len(base) - len(tag))
+            return f"{base}{padding}{tag}"
 
     # Reconstruct the line
     reconstructed = f"{code_part}{spacing}" + "".join(preserved_chunks)
