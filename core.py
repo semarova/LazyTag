@@ -88,21 +88,22 @@ def align_tags_with_comments(line, tags, comment_char, new_tag):
         comment_part = ""
 
     # Preserve all original comment chunks
-    comment_chunks = comment_part.split(comment_char)
-    preserved_chunks = [chunk.strip() for chunk in comment_chunks if chunk.strip()]
+    comment_chunks = [chunk.strip() for chunk in comment_part.split(comment_char) if chunk.strip()]
+    preserved_chunks = []
+    current_tags = set()
 
-    # Extract all tags from the full comment part
-    existing_tags = extract_tags(comment_part)
-    if new_tag not in existing_tags:
-        existing_tags.append(new_tag)
+    for chunk in comment_chunks:
+        chunk_tags = extract_tags(chunk)
+        current_tags.update(chunk_tags)
+        preserved_chunks.append(chunk)
 
-    tag_block = f"{comment_char} {', '.join(existing_tags)}"
+    # Only append tag if it's not already present
+    if new_tag not in current_tags:
+        current_tags.add(new_tag)
+        preserved_chunks.append(", ".join(sorted(current_tags)))
 
-    # Rebuild comments with original spacing intact
-    reconstructed = f"{code_part}{spacing}"
-    reconstructed += " ".join(f"{comment_char} {chunk}" for chunk in preserved_chunks)
-    reconstructed += f" {tag_block}"
-
+    # Reconstruct the line
+    reconstructed = f"{code_part}{spacing}" + " ".join(f"{comment_char} {chunk}" for chunk in preserved_chunks)
     return reconstructed
 
 def align_tags_to_col_80_preserve_deleted(line, tags, comment_char, new_tag):
