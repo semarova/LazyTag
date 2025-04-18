@@ -69,39 +69,43 @@ def is_code_line(line, ext):
     return bool(stripped) and not stripped.startswith(COMMENT_CHARS[ext])
 
 def align_tags_with_comments(line, tags, comment_char, new_tag):
-    """Preserve all original inline comments and append tags only at the end."""
+    """Preserve original inline comments and append tag only at the end, without shifting positions."""
     all_existing_tags = extract_tags(line)
     if new_tag in all_existing_tags:
         return line  # Already tagged
 
     line = line.rstrip()
 
+    # Find first comment position
     split_index = line.find(comment_char)
     if split_index != -1:
         code_part = line[:split_index].rstrip()
-        comment_part = line[split_index:].strip()
+        comment_part = line[split_index:].rstrip()
     else:
         code_part = line
         comment_part = ""
 
-    # Split all inline comments by comment char
-    comment_chunks = [chunk.strip() for chunk in comment_part.split(comment_char) if chunk.strip()]
-    final_comments = []
-    all_tags = set()
+    # Preserve the original comment structure
+    preserved_comment = comment_part
 
-    for chunk in comment_chunks:
-        chunk_tags = extract_tags(chunk)
-        all_tags.update(chunk_tags)
-        final_comments.append(chunk)
+    # Only extract tags to determine if new_tag needs to be added
+    existing_tags = extract_tags(comment_part)
+    if new_tag not in existing_tags:
+        existing_tags.append(new_tag)
 
-    if new_tag not in all_tags:
-        all_tags.add(new_tag)
-        # Append a new clean tag block to the end
-        final_comments.append(", ".join(sorted(all_tags)))
+    # Build the new tag block
+    tag_block = f"{comment_char} {', '.join(existing_tags)}"
 
-    # Reconstruct full line
-    reconstructed_comment = " ".join(f"{comment_char} {chunk}" for chunk in final_comments)
-    return f"{code_part} {reconstructed_comment}"
+    # Reconstruct the line preserving comment position and appending tag block
+    if preserved_comment:
+        reconstructed = f"{code_part} {preserved_comment}"
+    else:
+        reconstructed = code_part
+
+    # Append tag block at the end (respecting inline comments' position)
+    reconstructed += f" {tag_block}"
+
+    return reconstructed
 
 def align_tags_to_col_80_preserve_deleted(line, tags, comment_char, new_tag):
     if new_tag not in tags:
