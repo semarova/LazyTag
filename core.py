@@ -69,14 +69,13 @@ def is_code_line(line, ext):
     return bool(stripped) and not stripped.startswith(COMMENT_CHARS[ext])
 
 def align_tags_with_comments(line, tags, comment_char, new_tag):
-    """Preserve original inline comment and append tags, respecting comment positioning."""
+    """Preserve all original inline comments and append tags only at the end."""
     all_existing_tags = extract_tags(line)
     if new_tag in all_existing_tags:
         return line  # Already tagged
 
     line = line.rstrip()
 
-    # Find first comment position
     split_index = line.find(comment_char)
     if split_index != -1:
         code_part = line[:split_index].rstrip()
@@ -85,35 +84,24 @@ def align_tags_with_comments(line, tags, comment_char, new_tag):
         code_part = line
         comment_part = ""
 
-    # Split by comment character to preserve multiple inline comments
+    # Split all inline comments by comment char
     comment_chunks = [chunk.strip() for chunk in comment_part.split(comment_char) if chunk.strip()]
-    preserved_comments = []
-    existing_tags = []
+    final_comments = []
+    all_tags = set()
 
     for chunk in comment_chunks:
-        extracted = extract_tags(chunk)
-        if extracted:
-            existing_tags.extend(extracted)
-        else:
-            preserved_comments.append(chunk)
+        chunk_tags = extract_tags(chunk)
+        all_tags.update(chunk_tags)
+        final_comments.append(chunk)
 
-    if new_tag not in existing_tags:
-        existing_tags.append(new_tag)
+    if new_tag not in all_tags:
+        all_tags.add(new_tag)
+        # Append a new clean tag block to the end
+        final_comments.append(", ".join(sorted(all_tags)))
 
-    tag_block = f"{comment_char} {', '.join(existing_tags)}"
-
-    # Reconstruct line preserving all comment chunks and appending tag block last
-    reconstructed = code_part
-    for comment in preserved_comments:
-        reconstructed += f" {comment_char} {comment}"
-    reconstructed += f" {tag_block}"
-
-    total_len = len(reconstructed)
-    if total_len > MAX_LINE_LENGTH:
-        return reconstructed
-    else:
-        padding = MAX_LINE_LENGTH - total_len
-        return reconstructed + (' ' * padding)
+    # Reconstruct full line
+    reconstructed_comment = " ".join(f"{comment_char} {chunk}" for chunk in final_comments)
+    return f"{code_part} {reconstructed_comment}"
 
 def align_tags_to_col_80_preserve_deleted(line, tags, comment_char, new_tag):
     if new_tag not in tags:
