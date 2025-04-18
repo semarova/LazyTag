@@ -69,7 +69,7 @@ def is_code_line(line, ext):
     return bool(stripped) and not stripped.startswith(COMMENT_CHARS[ext])
 
 def align_tags_with_comments(line, tags, comment_char, new_tag):
-    """Preserve original inline comment and append tags, avoiding duplicate comment chars."""
+    """Preserve original inline comment and append tags, respecting comment positioning."""
     all_existing_tags = extract_tags(line)
     if new_tag in all_existing_tags:
         return line  # Already tagged
@@ -80,42 +80,40 @@ def align_tags_with_comments(line, tags, comment_char, new_tag):
     split_index = line.find(comment_char)
     if split_index != -1:
         code_part = line[:split_index].rstrip()
-        comment_tail = line[split_index:].replace(comment_char, '').strip()
+        comment_part = line[split_index:].strip()
     else:
         code_part = line
-        comment_tail = ""
+        comment_part = ""
 
-    # Split and clean comment tail
-    parts = re.split(r'[,\s]+', comment_tail)
-    comment_words = []
+    # Split by comment character to preserve multiple inline comments
+    comment_chunks = [chunk.strip() for chunk in comment_part.split(comment_char) if chunk.strip()]
+    preserved_comments = []
     existing_tags = []
 
-    for part in parts:
-        cleaned = part.strip("/#-")
-        if re.fullmatch(r'[A-Z]+-\d+', cleaned):
-            existing_tags.append(cleaned)
+    for chunk in comment_chunks:
+        extracted = extract_tags(chunk)
+        if extracted:
+            existing_tags.extend(extracted)
         else:
-            comment_words.append(part)
+            preserved_comments.append(chunk)
 
     if new_tag not in existing_tags:
         existing_tags.append(new_tag)
 
-    # Rebuild single comment block
-    comment_content = " ".join(comment_words).strip()
-    tag_block = f"{', '.join(existing_tags)}"
+    tag_block = f"{comment_char} {', '.join(existing_tags)}"
 
-    if comment_content:
-        final_comment = f"{comment_char} {comment_content} {comment_char} {tag_block}"
-    else:
-        final_comment = f"{comment_char} {tag_block}"
+    # Reconstruct line preserving all comment chunks and appending tag block last
+    reconstructed = code_part
+    for comment in preserved_comments:
+        reconstructed += f" {comment_char} {comment}"
+    reconstructed += f" {tag_block}"
 
-    # Align to 80
-    total_len = len(code_part) + 1 + len(final_comment)
+    total_len = len(reconstructed)
     if total_len > MAX_LINE_LENGTH:
-        return f"{code_part} {final_comment}"
+        return reconstructed
     else:
-        padding = MAX_LINE_LENGTH - len(code_part) - len(final_comment)
-        return f"{code_part}{' ' * padding}{final_comment}"
+        padding = MAX_LINE_LENGTH - total_len
+        return reconstructed + (' ' * padding)
 
 def align_tags_to_col_80_preserve_deleted(line, tags, comment_char, new_tag):
     if new_tag not in tags:
@@ -145,8 +143,6 @@ def process_file(filepath, tag, dry_run=False):
 
     updated_lines = []
     modified = False
-    tagged_lines = 0
-    skipped_lines = 0
 
     for idx, line in enumerate(lines, start=1):
         original = line.rstrip('\n')
@@ -154,46 +150,18 @@ def process_file(filepath, tag, dry_run=False):
         update_needed = False
 
         if idx in changes:
+            # If the tag is already anywhere in the line, skip tagging
             existing_all_tags = extract_tags(original)
             if tag in existing_all_tags:
-                skipped_lines += 1
                 if dry_run:
                     print(f"[SKIP]    {filepath}:{idx} (tag already exists)")
                 update_needed = False
             else:
                 if is_code_line(original, ext):
-                    comment_parts = original.split(comment_char)
-                    if len(comment_parts) >= 2:
-                        code_part = comment_parts[0].rstrip()
-                        comment_segments = comment_parts[1:]
-                        non_tags = []
-                        tag_candidates = []
-                        for segment in comment_segments:
-                            segment = segment.strip()
-                            if any(re.fullmatch(r'[A-Z]+-\d+', t.strip('/#-')) for t in segment.split()):
-                                tag_candidates.append(segment)
-                            else:
-                                non_tags.append(segment)
-
-                        all_tag_text = ' '.join(tag_candidates)
-                        tags = extract_tags(all_tag_text)
-                        if tag not in tags:
-                            tags.append(tag)
-
-                        new_comment = f" {comment_char} {non_tags[0]} {comment_char} {', '.join(tags)}" if non_tags else f" {comment_char} {', '.join(tags)}"
-                        total_len = len(code_part) + len(new_comment) + 1
-                        if total_len > MAX_LINE_LENGTH:
-                            modified_line = f"{code_part}{new_comment}"
-                        else:
-                            padding = MAX_LINE_LENGTH - len(code_part) - len(new_comment)
-                            modified_line = f"{code_part}{' ' * padding}{new_comment}"
-
-                        update_needed = True
-                    else:
-                        match = re.search(rf'{re.escape(comment_char)}\s*(.*)$', original)
-                        tags = extract_tags(match.group(1)) if match else []
-                        modified_line = align_tags_with_comments(original, tags, comment_char, tag)
-                        update_needed = True
+                    match = re.search(rf'{re.escape(comment_char)}\s*(.*)$', original)
+                    tags = extract_tags(match.group(1)) if match else []
+                    modified_line = align_tags_with_comments(original, tags, comment_char, tag)
+                    update_needed = True
 
                 elif should_tag_comment_line(original, ext):
                     match = re.search(rf'{re.escape(comment_char)}\s*(.*)$', original)
@@ -203,7 +171,6 @@ def process_file(filepath, tag, dry_run=False):
 
         if update_needed:
             modified = True
-            tagged_lines += 1
             log_type = "DRY-RUN" if dry_run else "TAGGED"
             print(f"[{log_type}] {filepath}:{idx}\n  BEFORE: {original}\n  AFTER:  {modified_line}\n")
 
@@ -213,8 +180,6 @@ def process_file(filepath, tag, dry_run=False):
         with open(filepath, 'w') as f:
             f.writelines(updated_lines)
         subprocess.run(['git', 'add', filepath])
-
-    return tagged_lines, skipped_lines
 
 def process_files_with_tag(preferred_tag=None, dry_run=False):
     tag = preferred_tag or get_branch_tag()
