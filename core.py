@@ -49,7 +49,112 @@ def get_file_diff_lines(filename):
                     changes.append(i)
     return set(changes)
 
-def get_merge_base(base_branch="origin/development"):
+def extract_tags(comment):
+    parts = re.split(r'[,\s]+', comment)
+    tags = []
+    for part in parts:
+        cleaned = part.lstrip("/#-")
+        if re.fullmatch(r'[A-Z]+-\d+', cleaned):
+            tags.append(cleaned)
+    return tags
+
+def should_tag_comment_line(line, ext):
+    comment_char = COMMENT_CHARS.get(ext, '').lower()
+    stripped = line.strip().lower()
+    return (
+        stripped.startswith(f"{comment_char}deleted")  or 
+        stripped.startswith(f"{comment_char} deleted") or
+        stripped.startswith(f"{comment_char}delete")   or 
+        stripped.startswith(f"{comment_char} delete")  or 
+        stripped.startswith(f"{comment_char}remove")   or 
+        stripped.startswith(f"{comment_char} remove")  or 
+        stripped.startswith(f"{comment_char}removed")  or 
+        stripped.startswith(f"{comment_char} removed") or
+        stripped.startswith(f"{comment_char}move")     or 
+        stripped.startswith(f"{comment_char} move")    or
+        stripped.startswith(f"{comment_char}moved")    or
+        stripped.startswith(f"{comment_char} moved")
+    )
+
+def is_code_line(line, ext):
+    stripped = line.strip()
+    return bool(stripped) and not stripped.startswith(COMMENT_CHARS[ext])
+
+def align_tags_with_comments(line, tags, comment_char, new_tag):
+    all_existing_tags = extract_tags(line)
+    if new_tag in all_existing_tags:
+        return line
+
+    line = line.rstrip("\n")
+    comment_start = line.find(comment_char)
+    if comment_start != -1:
+        code_part = line[:comment_start].rstrip()
+        spacing = line[len(code_part):comment_start]
+        comment_part = line[comment_start:].rstrip()
+    else:
+        code_part = line.rstrip()
+        spacing = ""
+        comment_part = ""
+
+    chunks = []
+    remainder = comment_part
+    current_tags = set()
+
+    while True:
+        idx = remainder.find(comment_char)
+        if idx == -1:
+            break
+        next_idx = remainder.find(comment_char, idx + len(comment_char))
+        chunk = remainder[idx:next_idx] if next_idx != -1 else remainder[idx:]
+        chunks.append(chunk)
+        remainder = remainder[next_idx:] if next_idx != -1 else ""
+
+    preserved_chunks = []
+    for chunk in chunks:
+        preserved_chunks.append(chunk)
+        chunk_tags = extract_tags(chunk)
+        current_tags.update(chunk_tags)
+
+    if new_tag not in current_tags:
+        if preserved_chunks:
+            last = preserved_chunks[-1]
+            last_tags = extract_tags(last)
+            if last_tags:
+                tagless = last.rstrip()
+                if tagless.endswith(',') or tagless.endswith(' '):
+                    preserved_chunks[-1] = tagless + new_tag
+                else:
+                    preserved_chunks[-1] = tagless + ", " + new_tag
+            else:
+                preserved_chunks.append(f" {comment_char} {new_tag}")
+        else:
+            base = f"{code_part}"
+            tag = f"{comment_char} {new_tag}"
+            padding = " " * max(1, 80 - len(base) - len(tag))
+            return f"{base}{padding}{tag}"
+
+    reconstructed = f"{code_part}{spacing}" + "".join(preserved_chunks)
+    return reconstructed
+
+def align_tags_to_col_80_preserve_deleted(line, tags, comment_char, new_tag):
+    if new_tag not in tags:
+        tags.append(new_tag)
+
+    tag_block = f"{comment_char} {', '.join(tags)}"
+    line = line.rstrip()
+    tag_search_start = 40
+    tag_pos = line.find(comment_char, tag_search_start)
+    code_part = line[:tag_pos].rstrip() if tag_pos != -1 else line.rstrip()
+
+    total_len = len(code_part) + 1 + len(tag_block)
+    if total_len > MAX_LINE_LENGTH:
+        return f"{code_part} {tag_block}"
+    else:
+        padding = MAX_LINE_LENGTH - len(code_part) - len(tag_block)
+        return f"{code_part}{' ' * padding}{tag_block}"
+
+def get_merge_base(base_branch="origin/development") -> str:
+    def run_merge_base(branch):
         return subprocess.run(
             ["git", "merge-base", "HEAD", branch],
             capture_output=True, text=True
@@ -59,7 +164,6 @@ def get_merge_base(base_branch="origin/development"):
     if result.returncode == 0:
         return result.stdout.strip()
     else:
-        # fallback to main
         fallback = "main"
         fallback_result = run_merge_base(fallback)
         if fallback_result.returncode == 0:
@@ -88,10 +192,6 @@ def get_diff_lines_from_base(base_commit: str) -> dict[str, set[int]]:
                 count = int(match.group(2)) if match.group(2) else 1
                 changes[current_file].update(range(start, start + count))
     return changes
-
-# ... all previous functions like extract_tags, align_tags_with_comments, etc. remain unchanged
-
-# Replace the original function with this extended version
 
 def process_files_with_tag(preferred_tag=None, dry_run=False, scope="staged", base_branch="origin/development"):
     tag = preferred_tag or get_branch_tag()
