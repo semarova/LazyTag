@@ -37,7 +37,7 @@ pip install .[dev]
 ```
 ### 📜 Install as a Git Hook
 
-This installs a pre-commit hook at .git/hooks/pre-commit that automatically runs lazytag tag before every commit. **Not recommended for everyone. Use with caution!**
+This installs a pre-commit hook at `.git/hooks/pre-commit` that automatically runs `lazytag tag` before every commit. **Not recommended for everyone. Use with caution!**
 
 ``` bash
 lazytag install
