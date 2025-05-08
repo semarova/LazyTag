@@ -114,6 +114,14 @@ def test_formatting_preserved_on_comment_with_new_tag():
     assert "original comment" in result
     assert "SMR-2023" in result
 
+def test_tag_appends_with_comma_not_extra_comment():
+    line = 'print("Hello World")          # Ian-001'
+    result = align_tags_with_comments(line, ["Ian-001"], "#", "Ian-002")
+    assert result.count("#") == 1
+    assert "Ian-001" in result
+    assert "Ian-002" in result
+    assert "# Ian-001, Ian-002" in result
+
 def test_get_merge_base_with_fallback():
     with mock.patch("subprocess.run") as mock_run:
         # Simulate origin/main failing, main succeeding

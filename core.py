@@ -81,60 +81,41 @@ def is_code_line(line, ext):
     return bool(stripped) and not stripped.startswith(COMMENT_CHARS[ext])
 
 def align_tags_with_comments(line, tags, comment_char, new_tag):
+    """Preserve original inline comments and spacing. Append tag block only at the end."""
     all_existing_tags = extract_tags(line)
     if new_tag in all_existing_tags:
-        return line
+        return line  # Already tagged
 
     line = line.rstrip("\n")
+
     comment_start = line.find(comment_char)
     if comment_start != -1:
         code_part = line[:comment_start].rstrip()
-        spacing = line[len(code_part):comment_start]
-        comment_part = line[comment_start:].rstrip()
+        comment_part = line[comment_start:].strip()
     else:
-        code_part = line.rstrip()
-        spacing = ""
+        code_part = line
         comment_part = ""
 
-    chunks = []
-    remainder = comment_part
-    current_tags = set()
+    # Extract tags from the comment part
+    existing_tags = extract_tags(comment_part)
+    if new_tag not in existing_tags:
+        existing_tags.append(new_tag)
 
-    while True:
-        idx = remainder.find(comment_char)
-        if idx == -1:
-            break
-        next_idx = remainder.find(comment_char, idx + len(comment_char))
-        chunk = remainder[idx:next_idx] if next_idx != -1 else remainder[idx:]
-        chunks.append(chunk)
-        remainder = remainder[next_idx:] if next_idx != -1 else ""
+    # Rebuild a single clean tag comment block
+    tag_comment = f"{comment_char} {', '.join(existing_tags)}"
 
-    preserved_chunks = []
-    for chunk in chunks:
-        preserved_chunks.append(chunk)
-        chunk_tags = extract_tags(chunk)
-        current_tags.update(chunk_tags)
+    # Align to column 80 if there's no original comment
+    if not comment_part or comment_part.strip() in [comment_char, ""]:
+        padding = max(1, 80 - len(code_part) - len(tag_comment))
+        return f"{code_part}{' ' * padding}{tag_comment}"
 
-    if new_tag not in current_tags:
-        if preserved_chunks:
-            last = preserved_chunks[-1]
-            last_tags = extract_tags(last)
-            if last_tags:
-                tagless = last.rstrip()
-                if tagless.endswith(',') or tagless.endswith(' '):
-                    preserved_chunks[-1] = tagless + new_tag
-                else:
-                    preserved_chunks[-1] = tagless + ", " + new_tag
-            else:
-                preserved_chunks.append(f" {comment_char} {new_tag}")
-        else:
-            base = f"{code_part}"
-            tag = f"{comment_char} {new_tag}"
-            padding = " " * max(1, 80 - len(base) - len(tag))
-            return f"{base}{padding}{tag}"
+    # Otherwise preserve comment and just add tag if needed
+    if comment_part.startswith(comment_char):
+        comment_text = comment_part[len(comment_char):].strip()
+        return f"{code_part} {comment_char} {comment_text}, {new_tag}"
 
-    reconstructed = f"{code_part}{spacing}" + "".join(preserved_chunks)
-    return reconstructed
+    return f"{code_part} {tag_comment}"
+
 
 def align_tags_to_col_80_preserve_deleted(line, tags, comment_char, new_tag):
     if new_tag not in tags:
