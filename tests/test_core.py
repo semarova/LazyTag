@@ -122,16 +122,28 @@ def test_tag_appends_with_comma_not_extra_comment():
     assert "Ian-002" in result
     assert "# Ian-001, Ian-002" in result
 
-def test_get_merge_base_with_fallback():
-    with mock.patch("subprocess.run") as mock_run:
-        # Simulate origin/main failing, main succeeding
-        mock_run.side_effect = [
-            mock.Mock(returncode=1, stdout=""),                      # origin/main fails
-            mock.Mock(returncode=0, stdout="abc123fallback\n")       # main succeeds
-        ]
+# def test_get_merge_base_with_fallback():
+#     with mock.patch("subprocess.run") as mock_run:
+#         # Simulate origin/main failing, main succeeding
+#         mock_run.side_effect = [
+#             mock.Mock(returncode=1, stdout=""),                      # origin/main fails
+#             mock.Mock(returncode=0, stdout="abc123fallback\n")       # main succeeds
+#         ]
 
-        result = get_merge_base("origin/development")
-        assert result == "abc123fallback"
-        assert mock_run.call_count == 2
-        mock_run.assert_any_call(["git", "merge-base", "HEAD", "origin/development"], capture_output=True, text=True)
-        mock_run.assert_any_call(["git", "merge-base", "HEAD", "development"], capture_output=True, text=True)
+#         result = get_merge_base("origin/development")
+#         assert result == "abc123fallback"
+#         assert mock_run.call_count == 2
+#         mock_run.assert_any_call(["git", "merge-base", "HEAD", "origin/development"], capture_output=True, text=True)
+#         mock_run.assert_any_call(["git", "merge-base", "HEAD", "development"], capture_output=True, text=True)
+
+def test_get_merge_base_from_upstream():
+    with mock.patch("subprocess.run") as mock_run:
+        # Simulate successful merge-base from HEAD and upstream
+        mock_run.return_value = mock.Mock(returncode=0, stdout="abc123upstream\n")
+
+        result = get_merge_base()
+        assert result == "abc123upstream"
+        mock_run.assert_called_once_with(
+            ["git", "merge-base", "HEAD", "@{upstream}"],
+            capture_output=True, text=True
+        )

@@ -134,24 +134,20 @@ def align_tags_to_col_80_preserve_deleted(line, tags, comment_char, new_tag):
         padding = MAX_LINE_LENGTH - len(code_part) - len(tag_block)
         return f"{code_part}{' ' * padding}{tag_block}"
 
-def get_merge_base(base_branch="origin/development") -> str:
-    def run_merge_base(branch):
-        return subprocess.run(
-            ["git", "merge-base", "HEAD", branch],
-            capture_output=True, text=True
-        )
-
-    result = run_merge_base(base_branch)
+def get_merge_base(base_branch=None) -> str:
+    """
+    Find the merge-base of HEAD with the base_branch.
+    If base_branch is None, use the upstream branch (HEAD@{upstream}).
+    """
+    branch = base_branch or "@{upstream}"
+    result = subprocess.run(
+        ["git", "merge-base", "HEAD", branch],
+        capture_output=True, text=True
+    )
     if result.returncode == 0:
         return result.stdout.strip()
     else:
-        fallback = "main"
-        fallback_result = run_merge_base(fallback)
-        if fallback_result.returncode == 0:
-            print(f"[WARN] Branch '{base_branch}' not found. Falling back to '{fallback}'.")
-            return fallback_result.stdout.strip()
-        else:
-            raise RuntimeError(f"Could not find merge base with '{base_branch}' or fallback '{fallback}'.")
+        raise RuntimeError(f"Could not find merge base with '{branch}'")
 
 def get_diff_lines_from_base(base_commit: str) -> dict[str, set[int]]:
     result = subprocess.run(
@@ -174,7 +170,7 @@ def get_diff_lines_from_base(base_commit: str) -> dict[str, set[int]]:
                 changes[current_file].update(range(start, start + count))
     return changes
 
-def process_files_with_tag(preferred_tag=None, dry_run=False, scope="staged", base_branch="origin/development"):
+def process_files_with_tag(preferred_tag=None, dry_run=False, scope="staged", base_branch=None):
     tag = preferred_tag or get_branch_tag()
     if not tag:
         print("[ERROR] No Jira-style tag found (use --tag or a branch like ABC-1234-feature)")
