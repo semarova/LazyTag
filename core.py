@@ -50,11 +50,10 @@ def get_file_diff_lines(filename):
     return set(changes)
 
 def extract_tags(comment):
-    """Extract Jira-style tags from a comment string using robust splitting and cleanup."""
     parts = re.split(r'[,\s]+', comment)
     tags = []
     for part in parts:
-        cleaned = part.lstrip("/#-")  # Strip leading slashes, hashes, dashes
+        cleaned = part.lstrip("/#-")
         if re.fullmatch(r'[A-Z]+-\d+', cleaned):
             tags.append(cleaned)
     return tags
@@ -89,63 +88,34 @@ def align_tags_with_comments(line, tags, comment_char, new_tag):
 
     line = line.rstrip("\n")
 
-    # Find first comment position and preserve spacing between code and comments
     comment_start = line.find(comment_char)
     if comment_start != -1:
         code_part = line[:comment_start].rstrip()
-        spacing = line[len(code_part):comment_start]  # preserve exact spacing
-        comment_part = line[comment_start:].rstrip()
+        comment_part = line[comment_start:].strip()
     else:
-        code_part = line.rstrip()
-        spacing = ""
+        code_part = line
         comment_part = ""
 
-    # Preserve all original comment chunks with exact spacing
-    chunks = []
-    remainder = comment_part
-    current_tags = set()
+    # Extract tags from the comment part
+    existing_tags = extract_tags(comment_part)
+    if new_tag not in existing_tags:
+        existing_tags.append(new_tag)
 
-    while True:
-        idx = remainder.find(comment_char)
-        if idx == -1:
-            break
-        next_idx = remainder.find(comment_char, idx + len(comment_char))
-        chunk = remainder[idx:next_idx] if next_idx != -1 else remainder[idx:]
-        chunks.append(chunk)
-        remainder = remainder[next_idx:] if next_idx != -1 else ""
+    # Rebuild a single clean tag comment block
+    tag_comment = f"{comment_char} {', '.join(existing_tags)}"
 
-    preserved_chunks = []
-    for chunk in chunks:
-        preserved_chunks.append(chunk)
-        chunk_tags = extract_tags(chunk)
-        current_tags.update(chunk_tags)
+    # Align to column 80 if there's no original comment
+    if not comment_part or comment_part.strip() in [comment_char, ""]:
+        padding = max(1, 80 - len(code_part) - len(tag_comment))
+        return f"{code_part}{' ' * padding}{tag_comment}"
 
-    # Only append tag if it's not already present
-    if new_tag not in current_tags:
-        # Append to last tag block if the last chunk ends in a tag block
-        if preserved_chunks:
-            last = preserved_chunks[-1]
-            last_tags = extract_tags(last)
-            if last_tags:
-                # Append to existing tag block without changing spacing
-                tagless = last.rstrip()
-                if tagless.endswith(',') or tagless.endswith(' '):
-                    preserved_chunks[-1] = tagless + new_tag
-                else:
-                    preserved_chunks[-1] = tagless + ", " + new_tag
-            else:
-                # Add new tag comment block
-                preserved_chunks.append(f" {comment_char} {new_tag}")
-        else:
-            # No comments originally; align tag block to col 80
-            base = f"{code_part}"
-            tag = f"{comment_char} {new_tag}"
-            padding = " " * max(1, 80 - len(base) - len(tag))
-            return f"{base}{padding}{tag}"
+    # Otherwise preserve comment and just add tag if needed
+    if comment_part.startswith(comment_char):
+        comment_text = comment_part[len(comment_char):].strip()
+        return f"{code_part} {comment_char} {comment_text}, {new_tag}"
 
-    # Reconstruct the line
-    reconstructed = f"{code_part}{spacing}" + "".join(preserved_chunks)
-    return reconstructed
+    return f"{code_part} {tag_comment}"
+
 
 def align_tags_to_col_80_preserve_deleted(line, tags, comment_char, new_tag):
     if new_tag not in tags:
@@ -153,7 +123,6 @@ def align_tags_to_col_80_preserve_deleted(line, tags, comment_char, new_tag):
 
     tag_block = f"{comment_char} {', '.join(tags)}"
     line = line.rstrip()
-
     tag_search_start = 40
     tag_pos = line.find(comment_char, tag_search_start)
     code_part = line[:tag_pos].rstrip() if tag_pos != -1 else line.rstrip()
@@ -165,10 +134,83 @@ def align_tags_to_col_80_preserve_deleted(line, tags, comment_char, new_tag):
         padding = MAX_LINE_LENGTH - len(code_part) - len(tag_block)
         return f"{code_part}{' ' * padding}{tag_block}"
 
-def process_file(filepath, tag, dry_run=False):
+def get_merge_base(base_branch="origin/development") -> str:
+    def run_merge_base(branch):
+        return subprocess.run(
+            ["git", "merge-base", "HEAD", branch],
+            capture_output=True, text=True
+        )
+
+    result = run_merge_base(base_branch)
+    if result.returncode == 0:
+        return result.stdout.strip()
+    else:
+        fallback = "main"
+        fallback_result = run_merge_base(fallback)
+        if fallback_result.returncode == 0:
+            print(f"[WARN] Branch '{base_branch}' not found. Falling back to '{fallback}'.")
+            return fallback_result.stdout.strip()
+        else:
+            raise RuntimeError(f"Could not find merge base with '{base_branch}' or fallback '{fallback}'.")
+
+def get_diff_lines_from_base(base_commit: str) -> dict[str, set[int]]:
+    result = subprocess.run(
+        ["git", "diff", "--unified=0", base_commit, "HEAD"],
+        capture_output=True, text=True, check=True
+    )
+    diff_text = result.stdout
+    changes = {}
+    current_file = None
+
+    for line in diff_text.splitlines():
+        if line.startswith("+++ b/"):
+            current_file = line[6:].strip()
+            changes[current_file] = set()
+        elif line.startswith("@@") and current_file:
+            match = re.search(r'\+(\d+)(?:,(\d+))?', line)
+            if match:
+                start = int(match.group(1))
+                count = int(match.group(2)) if match.group(2) else 1
+                changes[current_file].update(range(start, start + count))
+    return changes
+
+def process_files_with_tag(preferred_tag=None, dry_run=False, scope="staged", base_branch="origin/development"):
+    tag = preferred_tag or get_branch_tag()
+    if not tag:
+        print("[ERROR] No Jira-style tag found (use --tag or a branch like ABC-1234-feature)")
+        return
+
+    if scope == "base":
+        try:
+            base_commit = get_merge_base(base_branch)
+        except RuntimeError as e:
+            print(f"[ERROR] {e}")
+            return
+        all_changes = get_diff_lines_from_base(base_commit)
+    else:
+        files = get_staged_files()
+        all_changes = {f: get_file_diff_lines(f) for f in files}
+
+    files_to_process = list(all_changes.keys())
+
+    if not files_to_process:
+        print("[INFO] No modified source files to process.")
+        return
+
+    print(f"[INFO] Tagging with: {tag}\n")
+
+    for file in files_to_process:
+        process_file(file, tag, dry_run=dry_run, override_lines=all_changes[file])
+
+    if dry_run:
+        print("\n[DRY-RUN] Complete. No files were modified.")
+    else:
+        print("\n[SUCCESS] Tagging complete.")
+
+def process_file(filepath, tag, dry_run=False, override_lines=None):
     ext = Path(filepath).suffix.lower()
     comment_char = COMMENT_CHARS[ext]
-    changes = get_file_diff_lines(filepath)
+    changes = override_lines if override_lines is not None else get_file_diff_lines(filepath)
 
     with open(filepath, 'r') as f:
         lines = f.readlines()
@@ -182,7 +224,6 @@ def process_file(filepath, tag, dry_run=False):
         update_needed = False
 
         if idx in changes:
-            # If the tag is already anywhere in the line, skip tagging
             existing_all_tags = extract_tags(original)
             if tag in existing_all_tags:
                 if dry_run:
@@ -212,23 +253,3 @@ def process_file(filepath, tag, dry_run=False):
         with open(filepath, 'w') as f:
             f.writelines(updated_lines)
         subprocess.run(['git', 'add', filepath])
-
-def process_files_with_tag(preferred_tag=None, dry_run=False):
-    tag = preferred_tag or get_branch_tag()
-    if not tag:
-        print("[ERROR] No Jira-style tag found (use --tag or a branch like ABC-1234-feature)")
-        return
-
-    files = get_staged_files()
-    if not files:
-        print("[INFO] No staged source files to process.")
-        return
-
-    print(f"[INFO] Tagging with: {tag}\n")
-    for file in files:
-        process_file(file, tag, dry_run)
-
-    if dry_run:
-        print("\n[DRY-RUN] Complete. No files were modified.")
-    else:
-        print("\n[SUCCESS] Tagging complete.")

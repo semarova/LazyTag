@@ -10,9 +10,11 @@ from core import (
     should_tag_comment_line,
     is_code_line,
     COMMENT_CHARS,
-    MAX_LINE_LENGTH
+    MAX_LINE_LENGTH,
+    get_merge_base
 )
 from pathlib import Path
+from unittest import mock
 
 def test_extract_tags():
     assert extract_tags("ABC-123") == ["ABC-123"]
@@ -111,3 +113,25 @@ def test_formatting_preserved_on_comment_with_new_tag():
     result = align_tags_with_comments(line, tags.copy(), "//", "SMR-2023")
     assert "original comment" in result
     assert "SMR-2023" in result
+
+def test_tag_appends_with_comma_not_extra_comment():
+    line = 'print("Hello World")          # Ian-001'
+    result = align_tags_with_comments(line, ["Ian-001"], "#", "Ian-002")
+    assert result.count("#") == 1
+    assert "Ian-001" in result
+    assert "Ian-002" in result
+    assert "# Ian-001, Ian-002" in result
+
+def test_get_merge_base_with_fallback():
+    with mock.patch("subprocess.run") as mock_run:
+        # Simulate origin/main failing, main succeeding
+        mock_run.side_effect = [
+            mock.Mock(returncode=1, stdout=""),                      # origin/main fails
+            mock.Mock(returncode=0, stdout="abc123fallback\n")       # main succeeds
+        ]
+
+        result = get_merge_base("origin/development")
+        assert result == "abc123fallback"
+        assert mock_run.call_count == 2
+        mock_run.assert_any_call(["git", "merge-base", "HEAD", "origin/development"], capture_output=True, text=True)
+        mock_run.assert_any_call(["git", "merge-base", "HEAD", "development"], capture_output=True, text=True)
